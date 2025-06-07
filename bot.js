@@ -37,7 +37,7 @@ bot.on("callback_query", async (query) => {
 
       // 📝 Mijozga yuboriladigan matnni tayyorlash
       const messageToClient = `
-Hurmatli mijoz, sizning avtomobilingiz (${user.carBrand} / ${user.carNumber}) uchun moyni ${user.filledAt} sanada quygan edingiz.
+Hurmatli mijoz, sizning avtomobilingiz (${user.carBrand} / ${user.carNumber}) uchun moyni ${user.filledAt.toLocaleDateString()} sanada quygan edingiz.
 
 Eslatib o'tamizki agar siz ${user.klameter} km yurgan bo‘lsangiz yoki ${new Date(user.nextChangeAt).toLocaleDateString()} sanasiga yetgan bo‘lsangiz, iltimos, yaqin oradagi shaxobchamizga tashrif buyuring.
 
