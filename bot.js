@@ -39,7 +39,7 @@ if(chatId!==AdminID){
       const userId = data.replace("load_", "");
       
     try {
-      const response = await fetch(`http://localhost:5000/clients/${userId}`);
+      const response = await fetch(`https://safonon.uz/clients/${userId}`);
       
       if (!response.ok) {
         throw new Error("Ma'lumotlarni olishda xatolik.");
