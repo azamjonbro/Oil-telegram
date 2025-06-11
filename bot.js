@@ -3,7 +3,7 @@ const fetch = require('node-fetch'); // Eslatma: Agar Node.js versiyangiz 18 dan
 const token = '8166120153:AAGibaZcVD5FTbiNz--MkVZF6PvEAfBqP6s';
 const bot = new TelegramBot(token, { polling: true });
 
-let AdminID =2043384301
+let AdminID =231199271
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
