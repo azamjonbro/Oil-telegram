@@ -51,7 +51,7 @@ if(chatId!==AdminID){
       const messageToClient = `
       Hurmatli mijoz, sizning  (${user.carBrand} / ${user.carNumber}) avtomobilingiz uchun moyni ${new Date(user.history[user.history.length-1].filledAt).toLocaleDateString()} sanada alishtirgan edingiz.
       
-      Eslatib o'tamizki siz ${user.history[user.history.length-1].klameter} km yurgan bo‘lsangiz avtomobilingiz moyini alishtirishingiz kerak. Agar siz shu masofani bosib o'tmagan bo'lsangiz  ${new Date(user.history[user.history.length-1].nextChangeAt).toLocaleDateString()} sanada alishtirishingiz kerak, iltimos, yaqin oradagi shaxobchamizga tashrif buyuring.
+      Eslatib o'tamizki siz ${user.history[user.history.length-1].klameter} km yurgan bo‘lsangiz avtomobilingiz moyini alishtirishingiz kerak. Agar siz shu masofani bosib o'tmagan bo'lsangiz  ${new Date(user.history[user.history.length-1].nextChangeAt).toLocaleDateString()} sanada alishtirishingiz kerak, so'rab qolamizki, yaqin oradagi shaxobchamizga tashrif buyuring.
       
       📞 Qo‘shimcha ma’lumot uchun bog‘lanish: +998913613619
       `.trim();
