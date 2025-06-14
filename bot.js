@@ -3,8 +3,18 @@ const axios = require('axios');
 const token = '8166120153:AAGibaZcVD5FTbiNz--MkVZF6PvEAfBqP6s';
 const bot = new TelegramBot(token, { polling: true });
 
-let AdminID =231199271
-// let AdminID = 2043384301
+// let AdminID =231199271
+let AdminID = 2043384301
+
+
+function formatDate(date) {
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
@@ -45,12 +55,14 @@ bot.on("callback_query", async (query) => {
         const latestHistory = user.history[user.history.length - 1];
 
         const messageToClient = `
-Hurmatli mijoz, sizning (${user.carBrand} / ${user.carNumber}) avtomobilingiz uchun moyni ${new Date(latestHistory.filledAt).toLocaleDateString()} sanada alishtirgan edingiz.
+Hurmatli mijoz, sizning (${user.carBrand} / ${user.carNumber}) avtomobilingiz uchun moyni ${formatDate(latestHistory.filledAt)} sanada almashtirgan edingiz.
 
-Eslatib o'tamizki siz ${latestHistory.klameter} km yurgan bo‘lsangiz avtomobilingiz moyini alishtirishingiz kerak. Agar siz shu masofani bosib o'tmagan bo'lsangiz ${new Date(latestHistory.nextChangeAt).toLocaleDateString()} sanada alishtirishingiz kerak, so'rab qolamizki, yaqin oradagi shaxobchamizga tashrif buyuring.
+Eslatib o‘tamiz, siz ${user.klameter} km yurganingizda moyni almashtirishingiz kerak. Agar bu masofani bosib o‘tmagan bo‘lsangiz, moyni ${formatDate(latestHistory.nextChangeAt)} sanada almashtirishingiz kerak.
+
+Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.
 
 📞 Qo‘shimcha ma’lumot uchun bog‘lanish: +998913613619
-        `.trim();
+`.trim();
 
         await bot.sendMessage(chatId, `📋 Nusxalash uchun xabar:\n\n${messageToClient}`);
       } catch (err) {
