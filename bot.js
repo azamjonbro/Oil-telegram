@@ -1,5 +1,5 @@
 const TelegramBot = require('node-telegram-bot-api');
-const fetch = require('node-fetch'); // Eslatma: Agar Node.js versiyangiz 18 dan past bo‘lsa, `node-fetch`ni alohida o‘rnating
+const axios = require('axios');
 const token = '8166120153:AAGibaZcVD5FTbiNz--MkVZF6PvEAfBqP6s';
 const bot = new TelegramBot(token, { polling: true });
 
@@ -31,38 +31,32 @@ bot.onText(/\/start/, (msg) => {
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
-if(chatId!==AdminID){
-    bot.sendMessage(chatId,"Siz bu botda admin emassiz")
-  }
-  else{
 
+  if (chatId !== AdminID) {
+    bot.sendMessage(chatId, "Siz bu botda admin emassiz");
+  } else {
     if (data.startsWith("load_")) {
       const userId = data.replace("load_", "");
-      
-    try {
-      const response = await fetch(`https://safonon.uz/clients/${userId}`);
-      
-      if (!response.ok) {
-        throw new Error("Ma'lumotlarni olishda xatolik.");
+
+      try {
+        const response = await axios.get(`https://safonon.uz/clients/${userId}`);
+        const user = response.data;
+
+        const latestHistory = user.history[user.history.length - 1];
+
+        const messageToClient = `
+Hurmatli mijoz, sizning (${user.carBrand} / ${user.carNumber}) avtomobilingiz uchun moyni ${new Date(latestHistory.filledAt).toLocaleDateString()} sanada alishtirgan edingiz.
+
+Eslatib o'tamizki siz ${latestHistory.klameter} km yurgan bo‘lsangiz avtomobilingiz moyini alishtirishingiz kerak. Agar siz shu masofani bosib o'tmagan bo'lsangiz ${new Date(latestHistory.nextChangeAt).toLocaleDateString()} sanada alishtirishingiz kerak, so'rab qolamizki, yaqin oradagi shaxobchamizga tashrif buyuring.
+
+📞 Qo‘shimcha ma’lumot uchun bog‘lanish: +998913613619
+        `.trim();
+
+        await bot.sendMessage(chatId, `📋 Nusxalash uchun xabar:\n\n${messageToClient}`);
+      } catch (err) {
+        console.error(err.message);
+        await bot.sendMessage(chatId, "❌ Yuklashda xatolik yuz berdi.");
       }
-      
-      const user = await response.json();
-      
-      // 📝 Mijozga yuboriladigan matnni tayyorlash
-      const messageToClient = `
-      Hurmatli mijoz, sizning  (${user.carBrand} / ${user.carNumber}) avtomobilingiz uchun moyni ${new Date(user.history[user.history.length-1].filledAt).toLocaleDateString()} sanada alishtirgan edingiz.
-      
-      Eslatib o'tamizki siz ${user.history[user.history.length-1].klameter} km yurgan bo‘lsangiz avtomobilingiz moyini alishtirishingiz kerak. Agar siz shu masofani bosib o'tmagan bo'lsangiz  ${new Date(user.history[user.history.length-1].nextChangeAt).toLocaleDateString()} sanada alishtirishingiz kerak, so'rab qolamizki, yaqin oradagi shaxobchamizga tashrif buyuring.
-      
-      📞 Qo‘shimcha ma’lumot uchun bog‘lanish: +998913613619
-      `.trim();
-      
-      await bot.sendMessage(chatId, `📋 Nusxalash uchun xabar:\n\n${messageToClient}`);
-    } catch (err) {
-      console.log(err.message);
-      
-      await bot.sendMessage(chatId, "❌ Yuklashda xatolik yuz berdi.");
     }
   }
-}
 });

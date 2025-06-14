@@ -4,7 +4,6 @@
   "description": "",
   "main": "bot.js",
   "type": "commonjs",
-  
   "scripts": {
     "start": "node bot.js"
   },
@@ -12,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "axios": "^1.9.0",
     "dotenv": "^16.5.0",
     "node-telegram-bot-api": "^0.66.0"
   }
