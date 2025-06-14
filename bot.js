@@ -3,8 +3,8 @@ const axios = require('axios');
 const token = '8166120153:AAGibaZcVD5FTbiNz--MkVZF6PvEAfBqP6s';
 const bot = new TelegramBot(token, { polling: true });
 
-// let AdminID =231199271
-let AdminID = 2043384301
+let AdminID =231199271
+// let AdminID = 2043384301
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
