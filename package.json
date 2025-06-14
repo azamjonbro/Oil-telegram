@@ -4,6 +4,7 @@
   "description": "",
   "main": "bot.js",
   "type": "commonjs",
+  
   "scripts": {
     "start": "node bot.js"
   },
