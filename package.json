@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "main": "bot.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node bot.js"
   },
