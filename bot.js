@@ -55,7 +55,7 @@ bot.on("callback_query", async (query) => {
         const latestHistory = user.history[user.history.length - 1];
 
         const messageToClient = `
-Hurmatli mijoz, sizning (${user.carBrand} / ${user.carNumber}) avtomobilingiz uchun moyni ${formatDate(latestHistory.filledAt)} sanada almashtirgan edingiz.
+Hurmatli mijoz,
 
 Eslatib o‘tamiz, siz ${latestHistory.klameter} km yurganingizda moyni almashtirishingiz kerak. Agar bu masofani bosib o‘tmagan bo‘lsangiz, moyni ${formatDate(latestHistory.nextChangeAt)} sanada almashtirishingiz kerak.
 
