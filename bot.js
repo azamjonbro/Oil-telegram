@@ -60,11 +60,9 @@ Hurmatli mijoz,
 Eslatib o‘tamiz, siz ${latestHistory.klameter} km yurganingizda moyni almashtirishingiz kerak. Agar bu masofani bosib o‘tmagan bo‘lsangiz, moyni ${formatDate(latestHistory.nextChangeAt)} sanada almashtirishingiz kerak.
 
 Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.
-
-📞 Qo‘shimcha ma’lumot uchun bog‘lanish: +998913613619
 `.trim();
 
-        await bot.sendMessage(chatId, `📋 Nusxalash uchun xabar:\n\n${messageToClient}`);
+        await bot.sendMessage(chatId, messageToClient);
       } catch (err) {
         console.error(err.message);
         await bot.sendMessage(chatId, "❌ Yuklashda xatolik yuz berdi.");
