@@ -3,8 +3,8 @@ const axios = require('axios');
 const token = '8166120153:AAGibaZcVD5FTbiNz--MkVZF6PvEAfBqP6s';
 const bot = new TelegramBot(token, { polling: true });
 
-let AdminID =231199271
-// let AdminID = 2043384301
+// let AdminID =231199271
+let AdminID = 2043384301
 
 
 function formatDate(date) {
@@ -18,26 +18,40 @@ function formatDate(date) {
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  if(chatId!==AdminID){
-    bot.sendMessage(chatId,"Siz bu botda admin emassiz")
+  if (chatId !== AdminID) {
+    bot.sendMessage(chatId, `Assalomu alaykum ${msg.from.first_name}!\n\nUshbu bot orqali siz avtomobilingiz moy almashtirish eslatmalarini olishingiz mumkin.
+      
+      \n iltimos telefon raqamingizni yuboring`, {
+      reply_markup: {
+        keyboard: [
+          [
+            {
+              text: "Telefon raqamni yuborish",
+              request_contact: true,
+            },
+          ],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      }
+    });
   }
-  else{
+  else {
 
-    
+
     bot.sendMessage(chatId, 'Moy almashtirish eslatma ilovasini oching:', {
       reply_markup: {
         inline_keyboard: [[
-        {
-          text: 'Ilovani ochish',
-          web_app: { url: 'https://oilprojects.netlify.app/' }
-        }
-      ]]
-    }
-  });
-}
+          {
+            text: 'Ilovani ochish',
+            web_app: { url: 'https://oilprojects.netlify.app/' }
+          }
+        ]]
+      }
+    });
+  }
 });
 
-// 📥 Yuklash tugmasi bosilganda
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
