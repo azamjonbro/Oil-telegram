@@ -5,14 +5,16 @@
   "main": "bot.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node ./src/bot.js"
+    "start": "node ./src/bot.js",
+    "dev": "nodemon ./src/bot.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.9.0",
+    "axios": "^1.13.1",
     "dotenv": "^16.5.0",
-    "node-telegram-bot-api": "^0.66.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "nodemon": "^3.1.10"
   }
 }
