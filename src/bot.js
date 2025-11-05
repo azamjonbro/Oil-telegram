@@ -52,11 +52,11 @@ bot.onText(/\/start/, (msg) => {
   }
 });
 
-// contact yoki oddiy raqam yozish holatlarini birlashtiramiz
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   let phoneNumber;
 
+  
   // 1️⃣ Agar foydalanuvchi contact yuborgan bo‘lsa
   if (msg.contact && msg.contact.phone_number) {
     phoneNumber = msg.contact.phone_number;
