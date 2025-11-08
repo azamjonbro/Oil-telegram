@@ -20,11 +20,11 @@ const userMenu = (userId) => ({
   inline_keyboard: [
     [
       { text: "📥 Moy almashtirish tarixi", callback_data: `load_${userId}` },
-      { text: "🚘 Avtoulov ma’lumotlari", callback_data: `info_${userId}` },
+      // { text: "🚘 Avtoulov ma’lumotlari", callback_data: `info_${userId}` },
     ],
     [
       { text: "📊 Balansni ko‘rish", callback_data: `balance_${userId}` },
-      { text: "➕ Hisobni to‘ldirish", callback_data: `topup_${userId}` },
+      // { text: "➕ Hisobni to‘ldirish", callback_data: `topup_${userId}` },
     ],
   ],
 });
@@ -113,19 +113,28 @@ bot.on("callback_query", async (query) => {
 
   try {
     // 📋 Moy tarixi
-    if (data.startsWith("load_")) {
-      const userId = data.split("_")[1];
-      const { data: user } = await axios.get(`https://safonon.uz/clients/${userId}`);
-      const latest = user.history.at(-1);
+   if (data.startsWith("load_")) {
+  const userId = data.split("_")[1];
 
-      const msg = `📋 Eslatma:\n\nSiz ${latest.klameter} km yurganingizda moyni almashtirishingiz kerak.\nYoki ${formatDate(
-        latest.nextChangeAt
-      )} sanada almashtiring.`;
+  try {
+    const param = await axios.get(`${API_BASE}/clients/history`, { params: { chatId } });
+    const latest = param.data.at(-1); // Oxirgi history entry
+    if (!latest) throw new Error("History topilmadi");
 
-      return bot.sendMessage(chatId, msg, {
-        reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
-      });
-    }
+    const msg = `📋 Eslatma:\n\nSiz ${latest.klameter} km yurganingizda moyni almashtirishingiz kerak.\nYoki ${formatDate(
+      latest.nextChangeAt
+    )} sanada almashtiring.`;
+
+    return bot.sendMessage(chatId, msg, {
+      reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
+    });
+  } catch (err) {
+    console.error("❌ Load callback error:", err.message);
+    return bot.sendMessage(chatId, "❌ Tarixni olishda xatolik yuz berdi.", {
+      reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
+    });
+  }
+}
 
     // 🚘 Avtomobil ma’lumotlari
     if (data.startsWith("info_")) {
