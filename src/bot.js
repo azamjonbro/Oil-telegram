@@ -118,7 +118,7 @@ bot.on("callback_query", async (query) => {
 
   try {
     const param = await axios.get(`${API_BASE}/clients/history`, { params: { chatId } });
-    const latest = param.data.at(-1); // Oxirgi history entry
+    const latest = param.data.at(-1);
     if (!latest) throw new Error("History topilmadi");
 
     const msg = `📋 Eslatma:\n\nSiz ${latest.klameter} km yurganingizda moyni almashtirishingiz kerak.\nYoki ${formatDate(
@@ -136,7 +136,6 @@ bot.on("callback_query", async (query) => {
   }
 }
 
-    // 🚘 Avtomobil ma’lumotlari
     if (data.startsWith("info_")) {
       const userId = data.split("_")[1];
       const { data: user } = await axios.get(`https://safonon.uz/clients/${userId}`);
@@ -157,7 +156,7 @@ bot.on("callback_query", async (query) => {
       });
     }
 
-    // 💳 Hisobni to‘ldirish
+
     if (data.startsWith("topup_")) {
       const userId = data.split("_")[1];
       return bot.sendMessage(
@@ -169,7 +168,6 @@ bot.on("callback_query", async (query) => {
       );
     }
 
-    // 🔙 Ortga qaytish
     if (data.startsWith("back_")) {
       const userId = data.split("_")[1];
       return bot.sendMessage(
@@ -179,7 +177,6 @@ bot.on("callback_query", async (query) => {
       );
     }
 
-    // Default javob
     bot.sendMessage(chatId, `ℹ️ Siz tanlagan tugma: ${data}`);
   } catch (err) {
     console.error(`❌ Callback (${data}) error:`, err.message);
@@ -187,4 +184,7 @@ bot.on("callback_query", async (query) => {
   }
 });
 
+ bot.on("polling_error", (err) => {
+   console.error("❌ Polling error:", err.message);
+ });
 console.log("✅ Bot is running...");
