@@ -1,13 +1,13 @@
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
-
-const token = "8008874583:AAEAgxCBg-_gRWRzcZsQJFkqzxsCpvbP1kM";
+require("dotenv").config();
+const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
 // 🔴 MUHIM: agar bot VPSda bo‘lsa localhost ISHLAMAYDI
-const API_BASE = "http://localhost:7766"; 
+const API_BASE = "https://oil.techinfo.uz"; 
 // const ADMIN_ID = 2043384301;
-const ADMIN_ID = 4043384301;
+const ADMIN_ID = 2043384301;
 
 
 // ================= UTILS =================
