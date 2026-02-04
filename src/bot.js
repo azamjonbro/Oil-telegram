@@ -7,7 +7,7 @@ const bot = new TelegramBot(token, { polling: true });
 // 🔴 MUHIM: agar bot VPSda bo‘lsa localhost ISHLAMAYDI
 const API_BASE = "https://oil.techinfo.uz"; 
 // const ADMIN_ID = 2043384301;
-const ADMIN_ID = 2043384301;
+const ADMIN_ID = 231199271;
 
 
 // ================= UTILS =================
