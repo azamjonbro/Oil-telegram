@@ -103,8 +103,10 @@ bot.on("contact", async (msg) => {
   if (chatId === ADMIN_ID) {
     return bot.sendMessage(chatId, "Admin foydalanuvchi sifatida ro‘yxatdan o‘tolmaydi.");
   }
-
-  const phoneNumber = msg.contact.phone_number;
+  
+  
+  const phoneNumber = "+" + msg.contact.phone_number;
+  console.log(phoneNumber);
 
   try {
     const { data } = await axios.post(
