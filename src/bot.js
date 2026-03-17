@@ -106,7 +106,7 @@ bot.on("contact", async (msg) => {
     );
   }
 
-  const phoneNumber = msg.contact.phone_number;
+  let phoneNumber = msg.contact.phone_number;
   if(!phoneNumber.startsWith("+")){
     phoneNumber = "+" + phoneNumber;
   }
