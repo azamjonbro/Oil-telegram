@@ -3,11 +3,18 @@ const axios = require("axios");
 require("dotenv").config();
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
+const Calendar = require("telegram-inline-calendar");
 
 
 const API_BASE = "https://oil.techinfo.uz";
-// const ADMIN_ID = 2043384301;
-const ADMIN_ID = 231199271;
+const ADMIN_ID = 2043384301;
+// const ADMIN_ID = 231199271;
+
+
+const calendar = new Calendar(bot, {
+  date_format: "YYYY-MM-DD",
+  language: "en", // xohlasang uz qilib o'zgartiramiz keyin
+});
 
 function formatDate(date) {
   const d = new Date(date);
@@ -35,14 +42,19 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   if (chatId === ADMIN_ID) {
     return bot.sendMessage(chatId, "⚙️ Admin panel:", {
       reply_markup: {
-        inline_keyboard: [
+        keyboard:[
+          [
+            {
+              text:"Calendar"
+            }
+          ],
           [
             {
               text: "🌐 Ilovani ochish",
               web_app: { url: "https://oilprojects.netlify.app/" },
             },
-          ],
-        ],
+          ]
+        ]
       },
     });
   }
@@ -93,6 +105,21 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
       },
     },
   );
+});
+
+bot.onText(/\Calendar/, (msg) => {
+  const chatId = msg.chat.id;
+
+  if (chatId !== ADMIN_ID) {
+    return bot.sendMessage(chatId, "❌ Bu buyruq faqat admin uchun.");
+  }
+
+  bot.sendMessage(
+    chatId,
+    "📅 Kerakli sanani tanlang:"
+  );
+
+  calendar.startNavCalendar(msg);
 });
 
 // ================= CONTACT =================
@@ -156,13 +183,37 @@ bot.on("contact", async (msg) => {
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
+  
 
+  if (calendar.clickButtonCalendar(query)) {
+      const date = query.data.slice(2, 12); // format: calendar_2024-06-30\
+      
+
+      await bot.sendMessage(
+        chatId,
+        `📅 Tanlangan sana: ${date}`
+      );
+
+      let setDate = new Date(date);
+      fetch(`${API_BASE}/clients/getClientsNotificationForDate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ date: setDate }),
+      })
+      
+
+      // 🔥 BU YERDA SENING LOGIKA
+      // masalan:
+      // const users = await User.find({ createdAt: { $gte: new Date(date) } });
+  }
   try {
 
     // helper — kimni ochamiz?
     const getTargetId = (callbackUserId) =>
       chatId === ADMIN_ID ? callbackUserId : chatId;
-
+    
     // ================= LOAD =================
     if (data.startsWith("load_")) {
       const userId = data.split("_")[1];
