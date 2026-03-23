@@ -3,11 +3,16 @@ const axios = require("axios");
 require("dotenv").config();
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
-
+const Calendar = require("telegram-inline-calendar");
 
 const API_BASE = "https://oil.techinfo.uz";
-// const ADMIN_ID = 2043384301;
-const ADMIN_ID = 231199271;
+const ADMIN_ID = 2043384301;
+// const ADMIN_ID = 231199271;
+
+const calendar = new Calendar(bot, {
+  date_format: "YYYY-MM-DD",
+  language: "en", // xohlasang uz qilib o'zgartiramiz keyin
+});
 
 function formatDate(date) {
   const d = new Date(date);
@@ -17,16 +22,17 @@ function formatDate(date) {
   return `${day}-${month}-${year}`;
 }
 
-
 const userMenu = (userId) => ({
   inline_keyboard: [
     [
-      { text: "📥 Moy almashtirish tarixi", callback_data: `checklist_${userId}` },
+      {
+        text: "📥 Moy almashtirish tarixi",
+        callback_data: `checklist_${userId}`,
+      },
       { text: "📊 Balans", callback_data: `balance_${userId}` },
     ],
   ],
 });
-
 
 bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   const chatId = msg.chat.id;
@@ -35,7 +41,12 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   if (chatId === ADMIN_ID) {
     return bot.sendMessage(chatId, "⚙️ Admin panel:", {
       reply_markup: {
-        inline_keyboard: [
+        keyboard: [
+          [
+            {
+              text: "Calendar",
+            },
+          ],
           [
             {
               text: "🌐 Ilovani ochish",
@@ -95,6 +106,18 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   );
 });
 
+bot.onText(/\Calendar/, (msg) => {
+  const chatId = msg.chat.id;
+
+  if (chatId !== ADMIN_ID) {
+    return bot.sendMessage(chatId, "❌ Bu buyruq faqat admin uchun.");
+  }
+
+  bot.sendMessage(chatId, "📅 Kerakli sanani tanlang:");
+
+  calendar.startNavCalendar(msg);
+});
+
 // ================= CONTACT =================
 bot.on("contact", async (msg) => {
   const chatId = msg.chat.id;
@@ -107,7 +130,7 @@ bot.on("contact", async (msg) => {
   }
 
   let phoneNumber = msg.contact.phone_number;
-  if(!phoneNumber.startsWith("+")){
+  if (!phoneNumber.startsWith("+")) {
     phoneNumber = "+" + phoneNumber;
   }
 
@@ -158,6 +181,21 @@ bot.on("callback_query", async (query) => {
   const data = query.data;
 
   try {
+    if (calendar.clickButtonCalendar(query)) {
+      if (data.startsWith("n_") && data.length >= 13) {
+        const date = query.data.slice(2, 12);
+
+        await bot.answerCallbackQuery(query.id);
+
+        await fetch(`${API_BASE}/clients/notify-admin`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ date }),
+        });
+      }
+    }
 
     // helper — kimni ochamiz?
     const getTargetId = (callbackUserId) =>
@@ -171,8 +209,7 @@ bot.on("callback_query", async (query) => {
       const res = await fetch(`${API_BASE}/clients/${targetId}`);
       const user = await res.json();
 
-      if (!user)
-        return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
 
       const latest = user.history?.at(-1);
       if (!latest)
@@ -192,7 +229,7 @@ Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.`;
         return bot.sendMessage(chatId, text, {
           reply_markup: {
             inline_keyboard: [
-              [{ text: "📨 Mijozga yuborish", callback_data: `send_${targetId}` }],
+              // [{ text: "📨 Mijozga yuborish", callback_data: `send_${targetId}` }],
               [{ text: "🔙 Ortga", callback_data: `back_${targetId}` }],
             ],
           },
@@ -213,7 +250,7 @@ Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.`;
               [{ text: "🔙 Ortga", callback_data: `back_${targetId}` }],
             ],
           },
-        }
+        },
       );
     }
 
@@ -225,8 +262,7 @@ Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.`;
       const res = await fetch(`${API_BASE}/clients/${targetId}`);
       const user = await res.json();
 
-      if (!user)
-        return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
 
       if (!user.history?.length)
         return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.");
@@ -256,8 +292,7 @@ Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.`;
       const user = await res.json();
 
       const latest = user.history?.at(-1);
-      if (!latest)
-        return bot.sendMessage(chatId, "❌ Servis tarixi yo‘q.");
+      if (!latest) return bot.sendMessage(chatId, "❌ Servis tarixi yo‘q.");
 
       const text = `Hurmatli mijoz,
 
@@ -296,21 +331,21 @@ Agar bu masofani bosib o‘tmagan bo‘lsangiz, moyni ${formatDate(latest.notifi
         reply_markup: {
           inline_keyboard: [
             [
-              { text: "📥 Moy almashtirish tarixi", callback_data: `checklist_${targetId}` },
+              {
+                text: "📥 Moy almashtirish tarixi",
+                callback_data: `checklist_${targetId}`,
+              },
               { text: "📊 Balans", callback_data: `balance_${targetId}` },
             ],
           ],
         },
       });
     }
-
   } catch (err) {
     console.error("❌ CALLBACK ERROR:", err);
     bot.sendMessage(chatId, "❌ Server bilan aloqa xatosi.");
   }
 });
-
-
 
 // ================= ERRORS =================
 bot.on("polling_error", (err) => {
