@@ -6,8 +6,8 @@ const bot = new TelegramBot(token, { polling: true });
 const Calendar = require("telegram-inline-calendar");
 
 const API_BASE = "https://oil.techinfo.uz";
-const ADMIN_ID = 2043384301;
-// const ADMIN_ID = 231199271;
+// const ADMIN_ID = 2043384301;
+const ADMIN_ID = 231199271;
 
 const calendar = new Calendar(bot, {
   date_format: "YYYY-MM-DD",
