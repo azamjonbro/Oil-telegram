@@ -187,13 +187,7 @@ bot.on("callback_query", async (query) => {
 
         await bot.answerCallbackQuery(query.id);
 
-        await fetch(`${API_BASE}/clients/notify-admin`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ date }),
-        });
+        await axios.post(`${API_BASE}/clients/notify-admin`, { date });
       }
     }
 
@@ -206,8 +200,8 @@ bot.on("callback_query", async (query) => {
       const userId = data.split("_")[1];
       const targetId = getTargetId(userId);
 
-      const res = await fetch(`${API_BASE}/clients/${targetId}`);
-      const user = await res.json();
+      const res = await axios.get(`${API_BASE}/clients/${targetId}`);
+      const user = res.data;
 
       if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
 
@@ -259,8 +253,8 @@ Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.`;
       const userId = data.split("_")[1];
       const targetId = getTargetId(userId);
 
-      const res = await fetch(`${API_BASE}/clients/${targetId}`);
-      const user = await res.json();
+      const res = await axios.get(`${API_BASE}/clients/${targetId}`);
+      const user = res.data;
 
       if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
 
@@ -288,8 +282,8 @@ Yaqin oradagi shoxobchamizga tashrif buyurishingizni so‘rab qolamiz.`;
     else if (data.startsWith("send_") && chatId === ADMIN_ID) {
       const userId = data.split("_")[1];
 
-      const res = await fetch(`${API_BASE}/clients/${userId}`);
-      const user = await res.json();
+      const res = await axios.get(`${API_BASE}/clients/${userId}`);
+      const user = res.data;
 
       const latest = user.history?.at(-1);
       if (!latest) return bot.sendMessage(chatId, "❌ Servis tarixi yo‘q.");
@@ -310,8 +304,8 @@ Agar bu masofani bosib o‘tmagan bo‘lsangiz, moyni ${formatDate(latest.notifi
       const userId = data.split("_")[1];
       const targetId = getTargetId(userId);
 
-      const res = await fetch(`${API_BASE}/clients/${targetId}`);
-      const user = await res.json();
+      const res = await axios.get(`${API_BASE}/clients/${targetId}`);
+      const user = res.data;
 
       return bot.sendMessage(chatId, `💰 Balans: ${user.balance} so‘m`, {
         reply_markup: {
@@ -342,7 +336,11 @@ Agar bu masofani bosib o‘tmagan bo‘lsangiz, moyni ${formatDate(latest.notifi
       });
     }
   } catch (err) {
-    console.error("❌ CALLBACK ERROR:", err);
+    if (err.name === "AggregateError" || err.errors) {
+      console.error("❌ CALLBACK AGGREGATE ERROR:", err.errors || err);
+    } else {
+      console.error("❌ CALLBACK ERROR:", err.message || err);
+    }
     bot.sendMessage(chatId, "❌ Server bilan aloqa xatosi.");
   }
 });
