@@ -42,7 +42,6 @@ const userMenu = (userId) => ({
 bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   const chatId = msg.chat.id;
 
-  // ADMIN
   if (chatId === ADMIN_ID) {
     return bot.sendMessage(chatId, "⚙️ Admin panel:", {
       reply_markup: {
@@ -60,7 +59,6 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
     });
   }
 
-  // USER — mavjudligini tekshir
   let user = null;
   try {
     const res = await axios.get(`${API_BASE}/clients/chatId`, {
@@ -70,7 +68,7 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
     user = res.data;
   } catch (err) {
     if (err.response?.status !== 404) {
-      console.error("❌ /start backend error:", err.message);
+      console.error("❌ /start error:", err.message);
       return bot.sendMessage(
         chatId,
         "⚠️ Server bilan bog'lanib bo'lmadi. Keyinroq urinib ko'ring."
@@ -86,7 +84,6 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
     );
   }
 
-  // Yangi user — telefon so'ra
   return bot.sendMessage(
     chatId,
     `Assalomu alaykum ${msg.from.first_name}!\n\n📱 Telefon raqamingizni yuboring:`,
@@ -105,11 +102,9 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
 // ================= CALENDAR (admin) =================
 bot.onText(/Calendar/, (msg) => {
   const chatId = msg.chat.id;
-
   if (chatId !== ADMIN_ID) {
     return bot.sendMessage(chatId, "❌ Bu buyruq faqat admin uchun.");
   }
-
   bot.sendMessage(chatId, "📅 Kerakli sanani tanlang:");
   calendar.startNavCalendar(msg);
 });
@@ -176,34 +171,56 @@ bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
 
-  try {
-    // --- Calendar callback'larini birinchi tekshir ---
-    // clickButtonCalendar faqat calendar tegishli bo'lsa true qaytaradi
-    const isCalendar = calendar.clickButtonCalendar(query);
+  console.log("📩 callback_data:", data);
 
-    if (isCalendar) {
-      // "n_YYYY-MM-DD" formatidagi date selection callback
-      if (data.startsWith("n_") && data.length >= 12) {
-        const date = data.slice(2, 12);
+  // --- Calendar callback'larini ALOHIDA try/catch ichida tekshir ---
+  let isCalendar = false;
+  try {
+    isCalendar = calendar.clickButtonCalendar(query);
+  } catch (calErr) {
+    console.error("📅 Calendar error (ignored):", calErr.message);
+    // Calendar xatosi bo'lsa isCalendar = false, davom etamiz
+  }
+
+  if (isCalendar) {
+    console.log("📅 Calendar handled:", data);
+
+    // Sana tanlandi — "n_YYYY-MM-DD" yoki faqat "YYYY-MM-DD" bo'lishi mumkin
+    const dateMatch = data.match(/(\d{4}-\d{2}-\d{2})/);
+    if (dateMatch) {
+      const date = dateMatch[1];
+      try {
         await bot.answerCallbackQuery(query.id);
+      } catch (_) {}
+      try {
         await axios.post(
           `${API_BASE}/clients/notify-admin`,
           { date },
           { timeout: 5000 }
         );
         return bot.sendMessage(chatId, `✅ ${date} sanasi tanlandi.`);
+      } catch (err) {
+        console.error("❌ notify-admin error:", err.message);
+        return bot.sendMessage(chatId, "❌ Sana saqlashda xatolik yuz berdi.");
       }
-      // Navigation (prev/next oy) — calendar o'zi handle qiladi
-      return;
     }
 
-    // --- Oddiy callback'lar ---
+    // Navigation tugmalari (< >) — calendar o'zi handle qiladi
+    try {
+      await bot.answerCallbackQuery(query.id);
+    } catch (_) {}
+    return;
+  }
+
+  // --- Oddiy callback'lar ---
+  try {
     await bot.answerCallbackQuery(query.id);
+  } catch (_) {}
 
-    // Admin bo'lsa callback ichidagi userId ishlatiladi, aks holda o'zini chatId'si
-    const getTargetId = (callbackUserId) =>
-      chatId === ADMIN_ID ? callbackUserId : chatId;
+  const getTargetId = (callbackUserId) =>
+    chatId === ADMIN_ID ? callbackUserId : chatId;
 
+  try {
     // ================= LOAD =================
     if (data.startsWith("load_")) {
       const userId = data.split("_")[1];
@@ -336,7 +353,6 @@ bot.on("callback_query", async (query) => {
       });
     }
   } catch (err) {
-    // AggregateError — bir nechta xatolar bir vaqtda
     if (err.name === "AggregateError" || Array.isArray(err.errors)) {
       console.error(
         "❌ AggregateError:",
