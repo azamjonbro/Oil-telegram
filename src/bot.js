@@ -10,7 +10,15 @@ const TOKEN    = process.env.TELEGRAM_BOT_TOKEN;
 const API_BASE = process.env.API_BASE || "https://oil.techinfo.uz";
 const ADMIN_ID = Number(process.env.ADMIN_ID) || 231199271;
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+const POLLING_OPTIONS = {
+  polling: {
+    interval: 2000,        // har 2 soniyada so'rov
+    autoStart: true,
+    params: { timeout: 10 },
+  },
+};
+
+let bot = new TelegramBot(TOKEN, POLLING_OPTIONS);
 
 const calendar = new Calendar(bot, {
   date_format: "YYYY-MM-DD",
@@ -348,10 +356,56 @@ bot.on("callback_query", async (query) => {
 });
 
 // ─────────────────────────────────────────
-//  POLLING ERROR
+//  POLLING ERROR — auto restart
 // ─────────────────────────────────────────
+let isRestarting = false;
+
 bot.on("polling_error", (err) => {
-  console.error("POLLING ERROR:", err.message);
+  // AggregateError ichidagi asosiy xatoni chiqarish
+  if (err.name === "AggregateError" || Array.isArray(err.errors)) {
+    const messages = (err.errors || []).map((e) => e.message).join(", ");
+    console.error(`⚠️ POLLING AggregateError: ${messages}`);
+  } else {
+    console.error(`⚠️ POLLING ERROR [${err.code}]:`, err.message);
+  }
+
+  // 409 Conflict — boshqa bot instance ishlayapti
+  if (err.code === "ETELEGRAM" && err.message?.includes("409")) {
+    console.error("❌ 409 Conflict: Boshqa bot instance ishlayapti! Jarayonni to'xtating.");
+    process.exit(1);
+  }
+
+  // EFATAL yoki tarmoq xatosi — 5 soniyadan so'ng qayta ulanish
+  if (!isRestarting) {
+    isRestarting = true;
+    console.log("🔄 5 soniyadan so'ng qayta ulanish...");
+
+    setTimeout(async () => {
+      try {
+        await bot.stopPolling();
+        await new Promise((r) => setTimeout(r, 1000));
+        await bot.startPolling();
+        console.log("✅ Polling qayta boshlandi.");
+      } catch (restartErr) {
+        console.error("❌ Qayta ulanishda xato:", restartErr.message);
+        process.exit(1); // PM2 / nodemon qayta ishga tushiradi
+      } finally {
+        isRestarting = false;
+      }
+    }, 5000);
+  }
+});
+
+// ─────────────────────────────────────────
+//  PROCESS ERROR HANDLERS
+// ─────────────────────────────────────────
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ unhandledRejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ uncaughtException:", err.message);
+  process.exit(1);
 });
 
 console.log("✅ Bot ishga tushdi...");
