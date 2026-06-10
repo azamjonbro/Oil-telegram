@@ -1,97 +1,125 @@
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
+const Calendar = require("telegram-inline-calendar");
 require("dotenv").config();
 
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
-const Calendar = require("telegram-inline-calendar");
+// ─────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────
+const TOKEN    = process.env.TELEGRAM_BOT_TOKEN;
+const API_BASE = process.env.API_BASE || "https://oil.techinfo.uz";
+const ADMIN_ID = Number(process.env.ADMIN_ID) || 231199271;
 
-const API_BASE = "https://oil.techinfo.uz";
-const ADMIN_ID = 231199271;
+const bot = new TelegramBot(TOKEN, { polling: true });
 
 const calendar = new Calendar(bot, {
   date_format: "YYYY-MM-DD",
   language: "en",
 });
 
-// ================= HELPERS =================
+// ─────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────
 function formatDate(date) {
+  if (!date) return "—";
   const d = new Date(date);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
+  return [
+    String(d.getDate()).padStart(2, "0"),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    d.getFullYear(),
+  ].join("-");
 }
 
-const userMenu = (userId) => ({
-  inline_keyboard: [
-    [
-      {
-        text: "📥 Moy almashtirish tarixi",
-        callback_data: `checklist_${userId}`,
-      },
-      {
-        text: "📊 Balans",
-        callback_data: `balance_${userId}`,
-      },
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ─────────────────────────────────────────
+//  KEYBOARDS
+// ─────────────────────────────────────────
+const adminKeyboard = {
+  reply_markup: {
+    keyboard: [
+      [{ text: "📅 Sana tanlash (Calendar)" }],
+      [{ text: "🌐 Ilovani ochish", web_app: { url: "https://oilprojects.netlify.app/" } }],
     ],
-  ],
-});
+    resize_keyboard: true,
+  },
+};
 
-// ================= /start =================
+function userInlineMenu(userId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "📥 Moy almashtirish tarixi", callback_data: `checklist_${userId}` },
+        { text: "💰 Balans",                  callback_data: `balance_${userId}`   },
+      ],
+    ],
+  };
+}
+
+function backButton(userId) {
+  return {
+    inline_keyboard: [
+      [{ text: "🔙 Ortga", callback_data: `back_${userId}` }],
+    ],
+  };
+}
+
+// ─────────────────────────────────────────
+//  API CALLS
+// ─────────────────────────────────────────
+async function apiGet(path, params = {}) {
+  const { data } = await axios.get(`${API_BASE}${path}`, { params, timeout: 8000 });
+  return data;
+}
+
+async function apiPost(path, body = {}) {
+  const { data } = await axios.post(`${API_BASE}${path}`, body, { timeout: 8000 });
+  return data;
+}
+
+async function apiPut(path, body = {}) {
+  const { data } = await axios.put(`${API_BASE}${path}`, body, { timeout: 8000 });
+  return data;
+}
+
+// ─────────────────────────────────────────
+//  /start
+// ─────────────────────────────────────────
 bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
-  const chatId = msg.chat.id;
+  const chatId   = msg.chat.id;
+  const name     = msg.from.first_name || "Foydalanuvchi";
 
+  // ADMIN
   if (chatId === ADMIN_ID) {
-    return bot.sendMessage(chatId, "⚙️ Admin panel:", {
-      reply_markup: {
-        keyboard: [
-          [{ text: "Calendar" }],
-          [
-            {
-              text: "🌐 Ilovani ochish",
-              web_app: { url: "https://oilprojects.netlify.app/" },
-            },
-          ],
-        ],
-        resize_keyboard: true,
-      },
-    });
+    return bot.sendMessage(chatId, "⚙️ Admin panel:", adminKeyboard);
   }
 
-  let user = null;
+  // USER — tekshirish
   try {
-    const res = await axios.get(`${API_BASE}/clients/chatId`, {
-      params: { id: chatId },
-      timeout: 5000,
-    });
-    user = res.data;
-  } catch (err) {
-    if (err.response?.status !== 404) {
-      console.error("❌ /start error:", err.message);
+    const user = await apiGet("/clients/chatId", { id: chatId });
+    if (user) {
       return bot.sendMessage(
         chatId,
-        "⚠️ Server bilan bog'lanib bo'lmadi. Keyinroq urinib ko'ring."
+        `👋 Xush kelibsiz, ${name}!`,
+        { reply_markup: userInlineMenu(user._id) }
       );
+    }
+  } catch (err) {
+    if (err.response?.status !== 404) {
+      console.error("/start apiGet error:", err.message);
+      return bot.sendMessage(chatId, "⚠️ Server bilan bog'lanib bo'lmadi. Keyinroq urinib ko'ring.");
     }
   }
 
-  if (user) {
-    return bot.sendMessage(
-      chatId,
-      `👋 Xush kelibsiz, ${msg.from.first_name}!`,
-      { reply_markup: userMenu(user._id) }
-    );
-  }
-
+  // Ro'yxatdan o'tmagan — telefon so'rash
   return bot.sendMessage(
     chatId,
-    `Assalomu alaykum ${msg.from.first_name}!\n\n📱 Telefon raqamingizni yuboring:`,
+    `Assalomu alaykum, ${name}!\n\n📱 Telefon raqamingizni yuboring:`,
     {
       reply_markup: {
-        keyboard: [
-          [{ text: "📞 Telefon raqamni yuborish", request_contact: true }],
-        ],
+        keyboard: [[{ text: "📞 Telefon raqamni yuborish", request_contact: true }]],
         resize_keyboard: true,
         one_time_keyboard: true,
       },
@@ -99,40 +127,31 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   );
 });
 
-// ================= CALENDAR (admin) =================
-bot.onText(/Calendar/, (msg) => {
+// ─────────────────────────────────────────
+//  CALENDAR (admin)
+// ─────────────────────────────────────────
+bot.onText(/📅 Sana tanlash \(Calendar\)/, (msg) => {
   const chatId = msg.chat.id;
-  if (chatId !== ADMIN_ID) {
-    return bot.sendMessage(chatId, "❌ Bu buyruq faqat admin uchun.");
-  }
-  bot.sendMessage(chatId, "📅 Kerakli sanani tanlang:");
+  if (chatId !== ADMIN_ID) return;
+  bot.sendMessage(chatId, "📅 Boshlanish sanasini tanlang:");
   calendar.startNavCalendar(msg);
 });
 
-// ================= CONTACT =================
+// ─────────────────────────────────────────
+//  CONTACT
+// ─────────────────────────────────────────
 bot.on("contact", async (msg) => {
   const chatId = msg.chat.id;
 
   if (chatId === ADMIN_ID) {
-    return bot.sendMessage(
-      chatId,
-      "Admin foydalanuvchi sifatida ro'yxatdan o'tolmaydi."
-    );
+    return bot.sendMessage(chatId, "Admin ro'yxatdan o'tolmaydi.");
   }
 
-  let phoneNumber = msg.contact.phone_number;
-  if (!phoneNumber.startsWith("+")) {
-    phoneNumber = "+" + phoneNumber;
-  }
-
-  console.log("📞 Phone:", phoneNumber);
+  let phone = msg.contact.phone_number;
+  if (!phone.startsWith("+")) phone = "+" + phone;
 
   try {
-    const { data } = await axios.post(
-      `${API_BASE}/clients/phone`,
-      { phone: phoneNumber },
-      { timeout: 5000 }
-    );
+    const data = await apiPost("/clients/phone", { phone });
 
     if (!data?.exists) {
       return bot.sendMessage(chatId, "ℹ️ Siz bo'yicha ma'lumot topilmadi.");
@@ -140,11 +159,7 @@ bot.on("contact", async (msg) => {
 
     const user = data.user;
 
-    await axios.put(
-      `${API_BASE}/clients/chatId`,
-      { chatId, userId: user._id },
-      { timeout: 5000 }
-    );
+    await apiPut("/clients/chatId", { chatId, userId: user._id });
 
     return bot.sendMessage(
       chatId,
@@ -152,233 +167,191 @@ bot.on("contact", async (msg) => {
       {
         reply_markup: {
           remove_keyboard: true,
-          inline_keyboard: userMenu(user._id).inline_keyboard,
+          inline_keyboard: userInlineMenu(user._id).inline_keyboard,
         },
       }
     );
   } catch (err) {
-    console.error("❌ CONTACT error:", {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: err.message,
-    });
+    console.error("CONTACT error:", err.message);
     bot.sendMessage(chatId, "❌ Ro'yxatdan o'tishda xatolik yuz berdi.");
   }
 });
 
-// ================= CALLBACKS =================
+// ─────────────────────────────────────────
+//  CALLBACKS
+// ─────────────────────────────────────────
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
-  const data = query.data;
+  const data   = query.data;
 
-  console.log("📩 callback_data:", data);
-
-  // --- Calendar callback'larini ALOHIDA try/catch ichida tekshir ---
+  // ── Calendar callback ──
   let isCalendar = false;
   try {
     isCalendar = calendar.clickButtonCalendar(query);
-  } catch (calErr) {
-    console.error("📅 Calendar error (ignored):", calErr.message);
-    // Calendar xatosi bo'lsa isCalendar = false, davom etamiz
-  }
-
-  if (isCalendar) {
-    console.log("📅 Calendar handled:", data);
-
-    // Sana tanlandi — "n_YYYY-MM-DD" yoki faqat "YYYY-MM-DD" bo'lishi mumkin
-    const dateMatch = data.match(/(\d{4}-\d{2}-\d{2})/);
-    if (dateMatch) {
-      const date = dateMatch[1];
-      try {
-        await bot.answerCallbackQuery(query.id);
-      } catch (_) {}
-      try {
-        await axios.post(
-          `${API_BASE}/clients/notify-admin`,
-          { date },
-          { timeout: 5000 }
-        );
-        return bot.sendMessage(chatId, `✅ ${date} sanasi tanlandi.`);
-      } catch (err) {
-        console.error("❌ notify-admin error:", err.message);
-        return bot.sendMessage(chatId, "❌ Sana saqlashda xatolik yuz berdi.");
-      }
-    }
-
-    // Navigation tugmalari (< >) — calendar o'zi handle qiladi
-    try {
-      await bot.answerCallbackQuery(query.id);
-    } catch (_) {}
-    return;
-  }
-
-  // --- Oddiy callback'lar ---
-  try {
-    await bot.answerCallbackQuery(query.id);
   } catch (_) {}
 
-  const getTargetId = (callbackUserId) =>
-    chatId === ADMIN_ID ? callbackUserId : chatId;
+  if (isCalendar) {
+    const dateMatch = data.match(/(\d{4}-\d{2}-\d{2})/);
+
+    // Navigation tugmalari (< >) — calendar o'zi handle qiladi
+    if (!dateMatch) {
+      try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+      return;
+    }
+
+    const fromDate = dateMatch[1];
+    const toDate   = todayISO();
+
+    try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+
+    // fromDate kelajakda bo'lsa
+    if (fromDate > toDate) {
+      return bot.sendMessage(chatId, `⚠️ Tanlangan sana (${fromDate}) hali kelmagan. Bugungi yoki o'tgan sanani tanlang.`);
+    }
+
+    try {
+      const result = await apiPost("/clients/notify-admin", { fromDate, toDate });
+      return bot.sendMessage(
+        chatId,
+        `✅ ${fromDate} → ${toDate} oralig'ida ${result.count ?? 0} ta xabar yuborildi.`
+      );
+    } catch (err) {
+      console.error("notify-admin error:", err.message);
+      return bot.sendMessage(chatId, "❌ Xabar yuborishda xatolik yuz berdi.");
+    }
+  }
+
+  // ── Oddiy callback'lar ──
+  try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+
+  // Admin bo'lsa userId = callbackdagi userId, aks holda chatId
+  const resolveTarget = (id) => (chatId === ADMIN_ID ? id : String(chatId));
 
   try {
-    // ================= LOAD =================
-    if (data.startsWith("load_")) {
-      const userId = data.split("_")[1];
-      const targetId = getTargetId(userId);
 
-      const res = await axios.get(`${API_BASE}/clients/${targetId}`, {
-        timeout: 5000,
-      });
-      const user = res.data;
+    // ── CHECKLIST ──
+    if (data.startsWith("checklist_")) {
+      const userId   = data.split("_")[1];
+      const targetId = resolveTarget(userId);
 
+      const user = await apiGet(`/clients/${targetId}`);
       if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
 
-      const latest = user.history?.at(-1);
-      if (!latest)
-        return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.");
-
-      if (chatId === ADMIN_ID) {
-        const text =
-          `Hurmatli ${user.name},\n\n` +
-          `${user.carBrand} / ${user.carNumber}\n\n` +
-          `Eslatib o'tamiz, siz ${latest.klameter} km yurganingizda moyni almashtirishingiz kerak.\n` +
-          `Agar bu masofani bosib o'tmagan bo'lsangiz, moyni ${formatDate(latest.notificationDate)} sanada almashtirishingiz kerak.\n\n` +
-          `Yaqin oradagi shoxobchamizga tashrif buyurishingizni so'rab qolamiz.`;
-
-        return bot.sendMessage(chatId, text, {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "🔙 Ortga", callback_data: `back_${targetId}` }],
-            ],
-          },
+      if (!user.history?.length) {
+        return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.", {
+          reply_markup: backButton(userId),
         });
       }
 
+      const latest = user.history.at(-1);
+      const text =
+        `📋 *Moy almashtirish tarixi*\n\n` +
+        `🚗 *Mashina:* ${user.carBrand} — ${user.carNumber}\n` +
+        `📅 *Bildirishnoma sanasi:* ${formatDate(latest.notificationDate)}\n` +
+        `🛢 *Kilometr:* ${latest.klameter ?? "—"} km\n` +
+        `📨 *Holati:* ${latest.notified ? "✅ yuborilgan" : "⏳ yuborilmagan"}`;
+
+      return bot.sendMessage(chatId, text, {
+        parse_mode: "Markdown",
+        reply_markup: backButton(userId),
+      });
+    }
+
+    // ── BALANCE ──
+    else if (data.startsWith("balance_")) {
+      const userId   = data.split("_")[1];
+      const targetId = resolveTarget(userId);
+
+      const user = await apiGet(`/clients/${targetId}`);
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+
       return bot.sendMessage(
         chatId,
-        `📋 Eslatma:\n\n🚗 ${user.carBrand}\n🛢 ${latest.klameter} km\n📅 ${formatDate(latest.notificationDate)}`,
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: "🔙 Ortga", callback_data: `back_${targetId}` }],
-            ],
-          },
-        }
+        `💰 *Balans:* ${user.balance ?? 0} so'm`,
+        { parse_mode: "Markdown", reply_markup: backButton(userId) }
       );
     }
 
-    // ================= CHECKLIST =================
-    else if (data.startsWith("checklist_")) {
+    // ── LOAD (admin — foydalanuvchi ma'lumotini ko'rish) ──
+    else if (data.startsWith("load_") && chatId === ADMIN_ID) {
       const userId = data.split("_")[1];
-      const targetId = getTargetId(userId);
 
-      const res = await axios.get(`${API_BASE}/clients/${targetId}`, {
-        timeout: 5000,
-      });
-      const user = res.data;
-
+      const user = await apiGet(`/clients/${userId}`);
       if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
-      if (!user.history?.length)
-        return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.");
 
-      const latest = user.history.at(-1);
+      const latest = user.history?.at(-1);
+      if (!latest) return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.");
 
       const text =
-        `📋 Moy almashtirish tarixi\n\n` +
-        `📅 ${formatDate(latest.notificationDate)}\n` +
-        `🛢 ${latest.klameter} km\n` +
-        `📨 ${latest.notified ? "✅ yuborilgan" : "⏳ yuborilmagan"}`;
+        `👤 *${user.name}*\n` +
+        `🚗 ${user.carBrand} / ${user.carNumber}\n` +
+        `📱 ${user.phone}\n\n` +
+        `🛢 *Moy:* ${latest.oilBrand ?? "—"}\n` +
+        `📏 *Kilometr:* ${latest.klameter ?? "—"} km\n` +
+        `📅 *Quyilgan:* ${formatDate(latest.filledAt)}\n` +
+        `📅 *Alishtirish:* ${formatDate(latest.nextChangeAt)}\n` +
+        `📆 *Bildirishnoma:* ${formatDate(latest.notificationDate)}\n` +
+        `📨 *Holati:* ${latest.notified ? "✅ yuborilgan" : "⏳ yuborilmagan"}`;
 
       return bot.sendMessage(chatId, text, {
+        parse_mode: "Markdown",
         reply_markup: {
           inline_keyboard: [
-            [{ text: "🔙 Ortga", callback_data: `back_${targetId}` }],
+            [{ text: "📤 Mijozga yuborish", callback_data: `send_${userId}` }],
+            [{ text: "🔙 Ortga",            callback_data: `back_${userId}` }],
           ],
         },
       });
     }
 
-    // ================= SEND (faqat admin) =================
+    // ── SEND (admin — mijozga xabar yuborish) ──
     else if (data.startsWith("send_") && chatId === ADMIN_ID) {
       const userId = data.split("_")[1];
 
-      const res = await axios.get(`${API_BASE}/clients/${userId}`, {
-        timeout: 5000,
-      });
-      const user = res.data;
+      const user = await apiGet(`/clients/${userId}`);
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+
+      if (!user.chatId) {
+        return bot.sendMessage(chatId, "⚠️ Bu foydalanuvchining Telegram chatId si yo'q.");
+      }
 
       const latest = user.history?.at(-1);
       if (!latest) return bot.sendMessage(chatId, "❌ Servis tarixi yo'q.");
 
       const text =
-        `Hurmatli mijoz,\n\n` +
-        `${user.carBrand} / ${user.carNumber}\n\n` +
-        `Eslatib o'tamiz, siz ${latest.klameter} km yurganingizda moyni almashtirishingiz kerak.\n` +
-        `Agar bu masofani bosib o'tmagan bo'lsangiz, moyni ${formatDate(latest.notificationDate)} sanada almashtirishingiz kerak.`;
+        `Hurmatli ${user.name},\n\n` +
+        `🚗 ${user.carBrand} / ${user.carNumber}\n\n` +
+        `Eslatib o'tamiz:\n` +
+        `🛢 ${latest.klameter} km da moy almashtirishingiz kerak.\n` +
+        `📅 Yoki ${formatDate(latest.notificationDate)} sanasigacha.`;
 
-      await bot.sendMessage(userId, text);
-      return bot.sendMessage(chatId, "✅ Mijozga yuborildi!");
-    }
-
-    // ================= BALANCE =================
-    else if (data.startsWith("balance_")) {
-      const userId = data.split("_")[1];
-      const targetId = getTargetId(userId);
-
-      const res = await axios.get(`${API_BASE}/clients/${targetId}`, {
-        timeout: 5000,
-      });
-      const user = res.data;
-
-      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
-
-      return bot.sendMessage(chatId, `💰 Balans: ${user.balance} so'm`, {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "🔙 Ortga", callback_data: `back_${targetId}` }],
-          ],
-        },
+      await bot.sendMessage(user.chatId, text);
+      return bot.sendMessage(chatId, "✅ Mijozga muvaffaqiyatli yuborildi!", {
+        reply_markup: backButton(userId),
       });
     }
 
-    // ================= BACK =================
+    // ── BACK ──
     else if (data.startsWith("back_")) {
       const userId = data.split("_")[1];
-      const targetId = getTargetId(userId);
-
-      return bot.sendMessage(chatId, "Asosiy menyu:", {
-        reply_markup: {
-          inline_keyboard: userMenu(targetId).inline_keyboard,
-        },
+      return bot.sendMessage(chatId, "📋 Asosiy menyu:", {
+        reply_markup: chatId === ADMIN_ID
+          ? adminKeyboard.reply_markup
+          : userInlineMenu(userId),
       });
     }
+
   } catch (err) {
-    if (err.name === "AggregateError" || Array.isArray(err.errors)) {
-      console.error(
-        "❌ AggregateError:",
-        JSON.stringify(
-          (err.errors || []).map((e) => e.message),
-          null,
-          2
-        )
-      );
-    } else {
-      console.error("❌ CALLBACK ERROR:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-    }
-
-    try {
-      await bot.sendMessage(chatId, "❌ Server bilan aloqa xatosi.");
-    } catch (_) {}
+    console.error("CALLBACK ERROR:", err.message, err.response?.data);
+    try { await bot.sendMessage(chatId, "❌ Server bilan aloqa xatosi."); } catch (_) {}
   }
 });
 
-// ================= POLLING ERROR =================
+// ─────────────────────────────────────────
+//  POLLING ERROR
+// ─────────────────────────────────────────
 bot.on("polling_error", (err) => {
-  console.error("❌ POLLING ERROR:", err.message);
+  console.error("POLLING ERROR:", err.message);
 });
 
 console.log("✅ Bot ishga tushdi...");
