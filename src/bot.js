@@ -7,10 +7,27 @@ require("dotenv").config();
 //  CONFIG
 // ─────────────────────────────────────────
 const TOKEN    = process.env.TELEGRAM_BOT_TOKEN;
-const API_BASE = process.env.API_BASE || "https://oil.techinfo.uz";
-const ADMIN_ID = Number(process.env.ADMIN_ID) || 231199271;
+const API_BASE = process.env.API_BASE || "http://localhost:7766";
+// const ADMIN_ID = Number(process.env.ADMIN_ID) || 2043384301;
+const ADMIN_ID = 231199271;
 
-const bot = new TelegramBot(TOKEN, { polling: true });
+
+const POLLING_OPTIONS = {
+  polling: {
+    interval: 2000,
+    autoStart: true,
+    params: { timeout: 10 },
+  },
+};
+
+if (process.env.SOCKS5_PROXY) {
+  const { SocksProxyAgent } = require("socks-proxy-agent");
+  POLLING_OPTIONS.request = {
+    agent: new SocksProxyAgent(process.env.SOCKS5_PROXY),
+  };
+}
+
+let bot = new TelegramBot(TOKEN, POLLING_OPTIONS);
 
 const calendar = new Calendar(bot, {
   date_format: "YYYY-MM-DD",
@@ -88,15 +105,13 @@ async function apiPut(path, body = {}) {
 //  /start
 // ─────────────────────────────────────────
 bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
-  const chatId   = msg.chat.id;
-  const name     = msg.from.first_name || "Foydalanuvchi";
+  const chatId = msg.chat.id;
+  const name   = msg.from.first_name || "Foydalanuvchi";
 
-  // ADMIN
   if (chatId === ADMIN_ID) {
     return bot.sendMessage(chatId, "⚙️ Admin panel:", adminKeyboard);
   }
 
-  // USER — tekshirish
   try {
     const user = await apiGet("/clients/chatId", { id: chatId });
     if (user) {
@@ -113,7 +128,6 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
     }
   }
 
-  // Ro'yxatdan o'tmagan — telefon so'rash
   return bot.sendMessage(
     chatId,
     `Assalomu alaykum, ${name}!\n\n📱 Telefon raqamingizni yuboring:`,
@@ -158,7 +172,6 @@ bot.on("contact", async (msg) => {
     }
 
     const user = data.user;
-
     await apiPut("/clients/chatId", { chatId, userId: user._id });
 
     return bot.sendMessage(
@@ -193,7 +206,6 @@ bot.on("callback_query", async (query) => {
   if (isCalendar) {
     const dateMatch = data.match(/(\d{4}-\d{2}-\d{2})/);
 
-    // Navigation tugmalari (< >) — calendar o'zi handle qiladi
     if (!dateMatch) {
       try { await bot.answerCallbackQuery(query.id); } catch (_) {}
       return;
@@ -204,19 +216,32 @@ bot.on("callback_query", async (query) => {
 
     try { await bot.answerCallbackQuery(query.id); } catch (_) {}
 
-    // fromDate kelajakda bo'lsa
     if (fromDate > toDate) {
-      return bot.sendMessage(chatId, `⚠️ Tanlangan sana (${fromDate}) hali kelmagan. Bugungi yoki o'tgan sanani tanlang.`);
+      return bot.sendMessage(
+        chatId,
+        `⚠️ Tanlangan sana (${fromDate}) hali kelmagan. Bugungi yoki o'tgan sanani tanlang.`
+      );
     }
 
+    let waitMsg;
     try {
-      const result = await apiPost("/clients/notify-admin", { fromDate, toDate });
+      waitMsg = await bot.sendMessage(chatId, "⏳ Xabarlar yuborilmoqda...");
+
+      const { data: result } = await axios.post(
+        `${API_BASE}/clients/notify-admin`,
+        { fromDate, toDate },
+        { timeout: 60000 }
+      );
+
+      await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+
       return bot.sendMessage(
         chatId,
         `✅ ${fromDate} → ${toDate} oralig'ida ${result.count ?? 0} ta xabar yuborildi.`
       );
     } catch (err) {
       console.error("notify-admin error:", err.message);
+      if (waitMsg) await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
       return bot.sendMessage(chatId, "❌ Xabar yuborishda xatolik yuz berdi.");
     }
   }
@@ -224,7 +249,6 @@ bot.on("callback_query", async (query) => {
   // ── Oddiy callback'lar ──
   try { await bot.answerCallbackQuery(query.id); } catch (_) {}
 
-  // Admin bo'lsa userId = callbackdagi userId, aks holda chatId
   const resolveTarget = (id) => (chatId === ADMIN_ID ? id : String(chatId));
 
   try {
@@ -272,7 +296,7 @@ bot.on("callback_query", async (query) => {
       );
     }
 
-    // ── LOAD (admin — foydalanuvchi ma'lumotini ko'rish) ──
+    // ── LOAD (admin) ──
     else if (data.startsWith("load_") && chatId === ADMIN_ID) {
       const userId = data.split("_")[1];
 
@@ -304,7 +328,7 @@ bot.on("callback_query", async (query) => {
       });
     }
 
-    // ── SEND (admin — mijozga xabar yuborish) ──
+    // ── SEND (admin) ──
     else if (data.startsWith("send_") && chatId === ADMIN_ID) {
       const userId = data.split("_")[1];
 
@@ -348,10 +372,53 @@ bot.on("callback_query", async (query) => {
 });
 
 // ─────────────────────────────────────────
-//  POLLING ERROR
+//  POLLING ERROR — auto restart
 // ─────────────────────────────────────────
+let isRestarting = false;
+
 bot.on("polling_error", (err) => {
-  console.error("POLLING ERROR:", err.message);
+  if (err.name === "AggregateError" || Array.isArray(err.errors)) {
+    const messages = (err.errors || []).map((e) => e.message).join(", ");
+    console.error(`⚠️ POLLING AggregateError: ${messages}`);
+  } else {
+    console.error(`⚠️ POLLING ERROR [${err.code}]:`, err.message);
+  }
+
+  if (err.code === "ETELEGRAM" && err.message?.includes("409")) {
+    console.error("❌ 409 Conflict: Boshqa bot instance ishlayapti! Jarayonni to'xtating.");
+    process.exit(1);
+  }
+
+  if (!isRestarting) {
+    isRestarting = true;
+    console.log("🔄 5 soniyadan so'ng qayta ulanish...");
+
+    setTimeout(async () => {
+      try {
+        await bot.stopPolling();
+        await new Promise((r) => setTimeout(r, 1000));
+        await bot.startPolling();
+        console.log("✅ Polling qayta boshlandi.");
+      } catch (restartErr) {
+        console.error("❌ Qayta ulanishda xato:", restartErr.message);
+        process.exit(1);
+      } finally {
+        isRestarting = false;
+      }
+    }, 5000);
+  }
+});
+
+// ─────────────────────────────────────────
+//  PROCESS ERROR HANDLERS
+// ─────────────────────────────────────────
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ unhandledRejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ uncaughtException:", err.message);
+  process.exit(1);
 });
 
 console.log("✅ Bot ishga tushdi...");
