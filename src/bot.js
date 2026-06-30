@@ -1,190 +1,425 @@
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
+const Calendar = require("telegram-inline-calendar");
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-const token = "8166120153:AAGibaZcVD5FTbiNz--MkVZF6PvEAfBqP6s";
-const bot = new TelegramBot(token, { polling: true });
-
+// ─────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────
+const TOKEN    = process.env.TELEGRAM_BOT_TOKEN;
+const API_BASE = process.env.API_BASE || "http://localhost:7766";
+// const ADMIN_ID = Number(process.env.ADMIN_ID) || 2043384301;
 const ADMIN_ID = 231199271;
-const API_BASE = "http://localhost:7766";
 
-function formatDate(date) {
-  const d = new Date(date);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
+
+const POLLING_OPTIONS = {
+  polling: {
+    interval: 2000,
+    autoStart: true,
+    params: { timeout: 10 },
+  },
+};
+
+if (process.env.SOCKS5_PROXY) {
+  const { SocksProxyAgent } = require("socks-proxy-agent");
+  POLLING_OPTIONS.request = {
+    agent: new SocksProxyAgent(process.env.SOCKS5_PROXY),
+  };
 }
 
-// 🔹 Asosiy menyu
-const userMenu = (userId) => ({
-  inline_keyboard: [
-    [
-      { text: "📥 Moy almashtirish tarixi", callback_data: `load_${userId}` },
-      // { text: "🚘 Avtoulov ma’lumotlari", callback_data: `info_${userId}` },
-    ],
-    [
-      { text: "📊 Balansni ko‘rish", callback_data: `balance_${userId}` },
-      // { text: "➕ Hisobni to‘ldirish", callback_data: `topup_${userId}` },
-    ],
-  ],
+let bot = new TelegramBot(TOKEN, POLLING_OPTIONS);
+
+const calendar = new Calendar(bot, {
+  date_format: "YYYY-MM-DD",
+  language: "en",
 });
 
-// 🔹 START komandasi
-bot.onText(/\/start/, async (msg) => {
+// ─────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────
+function formatDate(date) {
+  if (!date) return "—";
+  const d = new Date(date);
+  return [
+    String(d.getDate()).padStart(2, "0"),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    d.getFullYear(),
+  ].join("-");
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ─────────────────────────────────────────
+//  KEYBOARDS
+// ─────────────────────────────────────────
+const adminKeyboard = {
+  reply_markup: {
+    keyboard: [
+      [{ text: "📅 Sana tanlash (Calendar)" }],
+      [{ text: "🌐 Ilovani ochish", web_app: { url: "https://oilprojects.netlify.app/" } }],
+    ],
+    resize_keyboard: true,
+  },
+};
+
+function userInlineMenu(userId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "📥 Moy almashtirish tarixi", callback_data: `checklist_${userId}` },
+        { text: "💰 Balans",                  callback_data: `balance_${userId}`   },
+      ],
+    ],
+  };
+}
+
+function backButton(userId) {
+  return {
+    inline_keyboard: [
+      [{ text: "🔙 Ortga", callback_data: `back_${userId}` }],
+    ],
+  };
+}
+
+// ─────────────────────────────────────────
+//  API CALLS
+// ─────────────────────────────────────────
+async function apiGet(path, params = {}) {
+  const { data } = await axios.get(`${API_BASE}${path}`, { params, timeout: 8000 });
+  return data;
+}
+
+async function apiPost(path, body = {}) {
+  const { data } = await axios.post(`${API_BASE}${path}`, body, { timeout: 8000 });
+  return data;
+}
+
+async function apiPut(path, body = {}) {
+  const { data } = await axios.put(`${API_BASE}${path}`, body, { timeout: 8000 });
+  return data;
+}
+
+// ─────────────────────────────────────────
+//  /start
+// ─────────────────────────────────────────
+bot.onText(/\/start(?:\s+(.+))?/, async (msg) => {
   const chatId = msg.chat.id;
+  const name   = msg.from.first_name || "Foydalanuvchi";
 
   if (chatId === ADMIN_ID) {
-    return bot.sendMessage(chatId, "⚙️ Moy almashtirish ilovasi:", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🌐 Ilovani ochish", web_app: { url: "https://oilprojects.netlify.app/" } }],
-        ],
-      },
-    });
+    return bot.sendMessage(chatId, "⚙️ Admin panel:", adminKeyboard);
   }
 
   try {
-    const { data: user } = await axios.get(`${API_BASE}/clients/chatId`, {
-      params: { id: chatId },
-    });
-
+    const user = await apiGet("/clients/chatId", { id: chatId });
     if (user) {
       return bot.sendMessage(
         chatId,
-        `👋 Xush kelibsiz, ${msg.from.first_name}!\n\nSiz allaqachon ro'yxatdan o'tgansiz. Quyidagi menyudan tanlang:`,
-        { reply_markup: userMenu(user._id) }
+        `👋 Xush kelibsiz, ${name}!`,
+        { reply_markup: userInlineMenu(user._id) }
       );
     }
+  } catch (err) {
+    if (err.response?.status !== 404) {
+      console.error("/start apiGet error:", err.message);
+      return bot.sendMessage(chatId, "⚠️ Server bilan bog'lanib bo'lmadi. Keyinroq urinib ko'ring.");
+    }
+  }
 
-    bot.sendMessage(
+  return bot.sendMessage(
+    chatId,
+    `Assalomu alaykum, ${name}!\n\n📱 Telefon raqamingizni yuboring:`,
+    {
+      reply_markup: {
+        keyboard: [[{ text: "📞 Telefon raqamni yuborish", request_contact: true }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    }
+  );
+});
+
+// ─────────────────────────────────────────
+//  CALENDAR (admin)
+// ─────────────────────────────────────────
+bot.onText(/📅 Sana tanlash \(Calendar\)/, (msg) => {
+  const chatId = msg.chat.id;
+  if (chatId !== ADMIN_ID) return;
+  bot.sendMessage(chatId, "📅 Boshlanish sanasini tanlang:");
+  calendar.startNavCalendar(msg);
+});
+
+// ─────────────────────────────────────────
+//  CONTACT
+// ─────────────────────────────────────────
+bot.on("contact", async (msg) => {
+  const chatId = msg.chat.id;
+
+  if (chatId === ADMIN_ID) {
+    return bot.sendMessage(chatId, "Admin ro'yxatdan o'tolmaydi.");
+  }
+
+  let phone = msg.contact.phone_number;
+  if (!phone.startsWith("+")) phone = "+" + phone;
+
+  try {
+    const data = await apiPost("/clients/phone", { phone });
+
+    if (!data?.exists) {
+      return bot.sendMessage(chatId, "ℹ️ Siz bo'yicha ma'lumot topilmadi.");
+    }
+
+    const user = data.user;
+    await apiPut("/clients/chatId", { chatId, userId: user._id });
+
+    return bot.sendMessage(
       chatId,
-      `Assalomu alaykum ${msg.from.first_name}!\n\n📱 Iltimos, telefon raqamingizni yuboring:`,
+      `✅ Hurmatli ${user.name}, ro'yxatdan o'tish yakunlandi!`,
       {
         reply_markup: {
-          keyboard: [[{ text: "📞 Telefon raqamni yuborish", request_contact: true }]],
-          resize_keyboard: true,
-          one_time_keyboard: true,
+          remove_keyboard: true,
+          inline_keyboard: userInlineMenu(user._id).inline_keyboard,
         },
       }
     );
   } catch (err) {
-    console.error("❌ /start error:", err.message);
-    bot.sendMessage(chatId, "Xatolik yuz berdi. Iltimos, keyinroq urinib ko‘ring.");
+    console.error("CONTACT error:", err.message);
+    bot.sendMessage(chatId, "❌ Ro'yxatdan o'tishda xatolik yuz berdi.");
   }
 });
 
-// 📱 Telefon raqamni qabul qilish
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const phoneNumber =
-    msg.contact?.phone_number ||
-    (msg.text?.match(/^\+?998\d{9}$/) ? msg.text.trim() : null);
-  if (!phoneNumber) return;
-
-  if (chatId === ADMIN_ID) {
-    return bot.sendMessage(chatId, "Siz admin hisobidasiz, foydalanuvchi sifatida ro‘yxatdan o‘tolmaysiz.");
-  }
-
-  try {
-    const { data } = await axios.post("https://oil.techinfo.uz/clients/phone", { phone: phoneNumber });
-
-    if (!data.exists) {
-      return bot.sendMessage(chatId, "ℹ️ Ma'lumot topilmadi. Admin bilan bog‘laning.");
-    }
-
-    const user = data.user;
-    await axios.put(`${API_BASE}/clients/chatId`, { chatId, userId: user._id });
-
-    bot.sendMessage(
-      chatId,
-      `✅ Hurmatli ${user.name}, siz muvaffaqiyatli ro‘yxatdan o‘tdingiz!`,
-      { reply_markup: userMenu(user._id) }
-    );
-  } catch (err) {
-    console.error("❌ Phone handling error:", err.message);
-    bot.sendMessage(chatId, "Xatolik yuz berdi. Iltimos, qayta urinib ko‘ring.");
-  }
-});
-
-// 🔸 CALLBACK HANDLER
+// ─────────────────────────────────────────
+//  CALLBACKS
+// ─────────────────────────────────────────
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
-  const data = query.data;
+  const data   = query.data;
 
+  // ── Calendar callback ──
+  let isCalendar = false;
   try {
-    // 📋 Moy tarixi
-   if (data.startsWith("load_")) {
-  const userId = data.split("_")[1];
+    isCalendar = calendar.clickButtonCalendar(query);
+  } catch (_) {}
 
-  try {
-    const param = await axios.get(`${API_BASE}/clients/history`, { params: { chatId } });
-    const latest = param.data.at(-1);
-    if (!latest) throw new Error("History topilmadi");
+  if (isCalendar) {
+    const dateMatch = data.match(/(\d{4}-\d{2}-\d{2})/);
 
-    const msg = `📋 Eslatma:\n\nSiz ${latest.klameter} km yurganingizda moyni almashtirishingiz kerak.\nYoki ${formatDate(
-      latest.nextChangeAt
-    )} sanada almashtiring.`;
+    if (!dateMatch) {
+      try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+      return;
+    }
 
-    return bot.sendMessage(chatId, msg, {
-      reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
-    });
-  } catch (err) {
-    console.error("❌ Load callback error:", err.message);
-    return bot.sendMessage(chatId, "❌ Tarixni olishda xatolik yuz berdi.", {
-      reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
-    });
+    const fromDate = dateMatch[1];
+    const toDate   = todayISO();
+
+    try { await bot.answerCallbackQuery(query.id); } catch (_) {}
+
+    if (fromDate > toDate) {
+      return bot.sendMessage(
+        chatId,
+        `⚠️ Tanlangan sana (${fromDate}) hali kelmagan. Bugungi yoki o'tgan sanani tanlang.`
+      );
+    }
+
+    let waitMsg;
+    try {
+      waitMsg = await bot.sendMessage(chatId, "⏳ Xabarlar yuborilmoqda...");
+
+      const { data: result } = await axios.post(
+        `${API_BASE}/clients/notify-admin`,
+        { fromDate, toDate },
+        { timeout: 60000 }
+      );
+
+      await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+
+      return bot.sendMessage(
+        chatId,
+        `✅ ${fromDate} → ${toDate} oralig'ida ${result.count ?? 0} ta xabar yuborildi.`
+      );
+    } catch (err) {
+      console.error("notify-admin error:", err.message);
+      if (waitMsg) await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+      return bot.sendMessage(chatId, "❌ Xabar yuborishda xatolik yuz berdi.");
+    }
   }
-}
 
-    if (data.startsWith("info_")) {
-      const userId = data.split("_")[1];
-      const { data: user } = await axios.get(`https://safonon.uz/clients/${userId}`);
+  // ── Oddiy callback'lar ──
+  try { await bot.answerCallbackQuery(query.id); } catch (_) {}
 
-      const info = `🚗 Avtomobil ma’lumotlari:\n\nMarka: ${user.car.brand}\nModel: ${user.car.model}\nRaqam: ${user.car.number}`;
-      return bot.sendMessage(chatId, info, {
-        reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
+  const resolveTarget = (id) => (chatId === ADMIN_ID ? id : String(chatId));
+
+  try {
+
+    // ── CHECKLIST ──
+    if (data.startsWith("checklist_")) {
+      const userId   = data.split("_")[1];
+      const targetId = resolveTarget(userId);
+
+      const user = await apiGet(`/clients/${targetId}`);
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+
+      if (!user.history?.length) {
+        return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.", {
+          reply_markup: backButton(userId),
+        });
+      }
+
+      const latest = user.history.at(-1);
+      const text =
+        `📋 *Moy almashtirish tarixi*\n\n` +
+        `🚗 *Mashina:* ${user.carBrand} — ${user.carNumber}\n` +
+        `📅 *Bildirishnoma sanasi:* ${formatDate(latest.notificationDate)}\n` +
+        `🛢 *Kilometr:* ${latest.klameter ?? "—"} km\n` +
+        `📨 *Holati:* ${latest.notified ? "✅ yuborilgan" : "⏳ yuborilmagan"}`;
+
+      return bot.sendMessage(chatId, text, {
+        parse_mode: "Markdown",
+        reply_markup: backButton(userId),
       });
     }
 
-    // 💰 Balans
-    if (data.startsWith("balance_")) {
-      const userId = data.split("_")[1];
-      const param = await axios.get(`${API_BASE}/clients/getballance`, { params: { id: chatId } });
+    // ── BALANCE ──
+    else if (data.startsWith("balance_")) {
+      const userId   = data.split("_")[1];
+      const targetId = resolveTarget(userId);
 
-      return bot.sendMessage(chatId, `💰 Joriy balansingiz: ${param.data.balance} so‘m`, {
-        reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
+      const user = await apiGet(`/clients/${targetId}`);
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+
+      return bot.sendMessage(
+        chatId,
+        `💰 *Balans:* ${user.balance ?? 0} so'm`,
+        { parse_mode: "Markdown", reply_markup: backButton(userId) }
+      );
+    }
+
+    // ── LOAD (admin) ──
+    else if (data.startsWith("load_") && chatId === ADMIN_ID) {
+      const userId = data.split("_")[1];
+
+      const user = await apiGet(`/clients/${userId}`);
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+
+      const latest = user.history?.at(-1);
+      if (!latest) return bot.sendMessage(chatId, "📭 Servis tarixi mavjud emas.");
+
+      const text =
+        `👤 *${user.name}*\n` +
+        `🚗 ${user.carBrand} / ${user.carNumber}\n` +
+        `📱 ${user.phone}\n\n` +
+        `🛢 *Moy:* ${latest.oilBrand ?? "—"}\n` +
+        `📏 *Kilometr:* ${latest.klameter ?? "—"} km\n` +
+        `📅 *Quyilgan:* ${formatDate(latest.filledAt)}\n` +
+        `📅 *Alishtirish:* ${formatDate(latest.nextChangeAt)}\n` +
+        `📆 *Bildirishnoma:* ${formatDate(latest.notificationDate)}\n` +
+        `📨 *Holati:* ${latest.notified ? "✅ yuborilgan" : "⏳ yuborilmagan"}`;
+
+      return bot.sendMessage(chatId, text, {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📤 Mijozga yuborish", callback_data: `send_${userId}` }],
+            [{ text: "🔙 Ortga",            callback_data: `back_${userId}` }],
+          ],
+        },
       });
     }
 
-
-    if (data.startsWith("topup_")) {
+    // ── SEND (admin) ──
+    else if (data.startsWith("send_") && chatId === ADMIN_ID) {
       const userId = data.split("_")[1];
-      return bot.sendMessage(
-        chatId,
-        `💳 Hisobni to‘ldirish uchun quyidagi havoladan foydalaning:\nhttps://safonon.uz/pay/${userId}`,
-        {
-          reply_markup: { inline_keyboard: [[{ text: "🔙 Ortga", callback_data: `back_${userId}` }]] },
-        }
-      );
+
+      const user = await apiGet(`/clients/${userId}`);
+      if (!user) return bot.sendMessage(chatId, "❌ Foydalanuvchi topilmadi.");
+
+      if (!user.chatId) {
+        return bot.sendMessage(chatId, "⚠️ Bu foydalanuvchining Telegram chatId si yo'q.");
+      }
+
+      const latest = user.history?.at(-1);
+      if (!latest) return bot.sendMessage(chatId, "❌ Servis tarixi yo'q.");
+
+      const text =
+        `Hurmatli ${user.name},\n\n` +
+        `🚗 ${user.carBrand} / ${user.carNumber}\n\n` +
+        `Eslatib o'tamiz:\n` +
+        `🛢 ${latest.klameter} km da moy almashtirishingiz kerak.\n` +
+        `📅 Yoki ${formatDate(latest.notificationDate)} sanasigacha.`;
+
+      await bot.sendMessage(user.chatId, text);
+      return bot.sendMessage(chatId, "✅ Mijozga muvaffaqiyatli yuborildi!", {
+        reply_markup: backButton(userId),
+      });
     }
 
-    if (data.startsWith("back_")) {
+    // ── BACK ──
+    else if (data.startsWith("back_")) {
       const userId = data.split("_")[1];
-      return bot.sendMessage(
-        chatId,
-        "🔙 Asosiy menyuga qaytdingiz. Quyidagilardan birini tanlang:",
-        { reply_markup: userMenu(userId) }
-      );
+      return bot.sendMessage(chatId, "📋 Asosiy menyu:", {
+        reply_markup: chatId === ADMIN_ID
+          ? adminKeyboard.reply_markup
+          : userInlineMenu(userId),
+      });
     }
 
-    bot.sendMessage(chatId, `ℹ️ Siz tanlagan tugma: ${data}`);
   } catch (err) {
-    console.error(`❌ Callback (${data}) error:`, err.message);
-    bot.sendMessage(chatId, "❌ Ma’lumotni olishda xatolik yuz berdi.");
+    console.error("CALLBACK ERROR:", err.message, err.response?.data);
+    try { await bot.sendMessage(chatId, "❌ Server bilan aloqa xatosi."); } catch (_) {}
   }
 });
 
- bot.on("polling_error", (err) => {
-   console.error("❌ Polling error:", err.message);
- });
-console.log("✅ Bot is running...");
+// ─────────────────────────────────────────
+//  POLLING ERROR — auto restart
+// ─────────────────────────────────────────
+let isRestarting = false;
+
+bot.on("polling_error", (err) => {
+  if (err.name === "AggregateError" || Array.isArray(err.errors)) {
+    const messages = (err.errors || []).map((e) => e.message).join(", ");
+    console.error(`⚠️ POLLING AggregateError: ${messages}`);
+  } else {
+    console.error(`⚠️ POLLING ERROR [${err.code}]:`, err.message);
+  }
+
+  if (err.code === "ETELEGRAM" && err.message?.includes("409")) {
+    console.error("❌ 409 Conflict: Boshqa bot instance ishlayapti! Jarayonni to'xtating.");
+    process.exit(1);
+  }
+
+  if (!isRestarting) {
+    isRestarting = true;
+    console.log("🔄 5 soniyadan so'ng qayta ulanish...");
+
+    setTimeout(async () => {
+      try {
+        await bot.stopPolling();
+        await new Promise((r) => setTimeout(r, 1000));
+        await bot.startPolling();
+        console.log("✅ Polling qayta boshlandi.");
+      } catch (restartErr) {
+        console.error("❌ Qayta ulanishda xato:", restartErr.message);
+        process.exit(1);
+      } finally {
+        isRestarting = false;
+      }
+    }, 5000);
+  }
+});
+
+// ─────────────────────────────────────────
+//  PROCESS ERROR HANDLERS
+// ─────────────────────────────────────────
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ unhandledRejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ uncaughtException:", err.message);
+  process.exit(1);
+});
+
+console.log("✅ Bot ishga tushdi...");
