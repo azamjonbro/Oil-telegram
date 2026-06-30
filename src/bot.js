@@ -2,8 +2,8 @@ const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 const Calendar = require("telegram-inline-calendar");
 const path = require("path");
-require("dotenv").config({ path: path.join(__dirname, "../.env") });
-
+// require("dotenv").config({ path: path.join(__dirname, "../.env") });
+require("dotenv").config()
 // ─────────────────────────────────────────
 //  CONFIG
 // ─────────────────────────────────────────
@@ -422,4 +422,4 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-console.log("✅ Bot ishga tushdi...");gi
+console.log("✅ Bot ishga tushdi...");
