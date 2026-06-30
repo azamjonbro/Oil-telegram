@@ -422,4 +422,4 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-console.log("✅ Bot ishga tushdi...");
+console.log("✅ Bot ishga tushdi...");gi
