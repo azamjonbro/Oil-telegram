@@ -24,7 +24,9 @@ const POLLING_OPTIONS = {
 if (process.env.SOCKS5_PROXY) {
   const { SocksProxyAgent } = require("socks-proxy-agent");
   POLLING_OPTIONS.request = {
-    agent: new SocksProxyAgent(process.env.SOCKS5_PROXY),
+    agent: new SocksProxyAgent(process.env.SOCKS5_PROXY, {
+      timeout: 25000,
+    }),
   };
 }
 
