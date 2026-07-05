@@ -47,7 +47,7 @@ function formatDate(date) {
     String(d.getDate()).padStart(2, "0"),
     String(d.getMonth() + 1).padStart(2, "0"),
     d.getFullYear(),
-  ].join("-");
+  ].join(".");
 }
 
 function todayISO() {
@@ -345,12 +345,18 @@ bot.on("callback_query", async (query) => {
       const latest = user.history?.at(-1);
       if (!latest) return bot.sendMessage(chatId, "❌ Servis tarixi yo'q.");
 
-      const text =
-        `Hurmatli ${user.name},\n\n` +
-        `🚗 ${user.carBrand} / ${user.carNumber}\n\n` +
-        `Eslatib o'tamiz:\n` +
-        `🛢 ${latest.klameter} km da moy almashtirishingiz kerak.\n` +
-        `📅 Yoki ${formatDate(latest.notificationDate)} sanasigacha.`;
+      const text = `Assalomu alaykum ${user.name}.
+${user.carBrand || ""} / ${user.carNumber || ""}
+Eslatib o'tamiz.
+
+Oxirgi moy almashtirish: ${formatDate(latest.filledAt)} da amalga oshirilgan.
+
+Keyingi moy almashtirish tavsiya etilgan sana:
+${formatDate(latest.nextChangeAt)}
+${parseInt(latest.klameter || 0) + 8000} km masofada
+Avtomobilingizga xizmat ko'rsatish vaqti keldi.
+
+Sizni servisimizda kutamiz.`;
 
       await bot.sendMessage(user.chatId, text);
       return bot.sendMessage(chatId, "✅ Mijozga muvaffaqiyatli yuborildi!", {
